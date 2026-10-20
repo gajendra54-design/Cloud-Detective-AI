@@ -1,0 +1,22 @@
+{
+  "verified_at": "2026-10-19T04:52:27.363403+00:00",
+  "parallel_requests": 8,
+  "scope": "Concurrent HTTP requests against one backend process and real PostgreSQL; not multi-worker or sustained-load validation",
+  "passed": true,
+  "incident_id": "4c5c73ea-3424-4dc9-8e0a-1c3feef31957",
+  "action_id": "530e86e8-70d3-4469-aeac-7d93f84c79c2",
+  "unique_proposals": 1,
+  "successful_approvals": 1,
+  "execution_http_statuses": [
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200,
+    200
+  ],
+  "fresh_requests": 3.0,
+  "single_execution_timeline": true
+}

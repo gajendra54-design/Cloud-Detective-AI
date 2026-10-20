@@ -1,0 +1,44 @@
+{
+  "verified_at": "2026-10-19T04:47:24.445702+00:00",
+  "model": "qwen2.5:7b-instruct",
+  "provider": "ollama-guarded",
+  "elapsed_seconds": 60.62,
+  "incident_id": "a58394a9-2b80-4f03-a7e4-2bfb5183912a",
+  "evidence_ids": [
+    "3eeeebd9-55ce-4408-a068-f1d089a30744",
+    "6beb00f9-7b2f-4974-94a7-d24af88694b2"
+  ],
+  "live_model_passed": true,
+  "guardrails_passed": true,
+  "finding": {
+    "summary": "checkout: readiness not ready; observed error rate unavailable (not zero). Scenario: deployment. Health/readiness and metric availability are separate observations.",
+    "probable_cause": "AI hypothesis (unverified): Simulated deployment with restart enabled",
+    "confidence": "medium",
+    "confidence_meaning": "AI hypothesis, not verified causality. Confidence is capped at medium; observed facts and recovery criteria come from deterministic rules.",
+    "supporting_evidence_ids": [
+      "3eeeebd9-55ce-4408-a068-f1d089a30744",
+      "6beb00f9-7b2f-4974-94a7-d24af88694b2"
+    ],
+    "contradicting_evidence_ids": [],
+    "alternatives": [
+      "A readiness check failure or a health check issue might be causing the service to not be marked as ready, but the deployment scenario is the most likely cause given the context."
+    ],
+    "next_steps": [
+      "Monitor the deployment scenario to ensure it completes successfully.",
+      "Check for any issues that might be preventing the service from becoming ready."
+    ],
+    "recommended_action": "disable_failure",
+    "risk": "low",
+    "expected_recovery": "Three fresh successful requests, service/dependency readiness, latency under the configured objective, and no new observed request failures.",
+    "abort_conditions": "Abort on a scenario revision change, expired approval, timeout, or failed recovery check.",
+    "limitations": [
+      "This is a controlled local demo",
+      "Short observation windows are not a production SLO",
+      "No causal proof from timing correlation alone",
+      "Missing measurements are unavailable, never evidence of zero errors",
+      "Scenario expiry is not a restart schedule or a recovery guarantee",
+      "AI hypotheses and suggested steps require human review and may be inaccurate"
+    ]
+  },
+  "scope": "Retained real demo evidence; schema and citations validated, not a benchmark or causal-accuracy evaluation"
+}

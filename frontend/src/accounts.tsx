@@ -1,0 +1,9 @@
+import {useState} from 'react';
+import {api} from './api';
+export type Login={token:string;expires_at:string;user:{username:string;role:string}};
+export function AccountAccess({onAccess,session,setSession}:{onAccess:(token:string,role:string)=>void;session:Login|null;setSession:(value:Login|null)=>void}){
+ const [username,setUsername]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ async function signIn(event:React.FormEvent){event.preventDefault();setBusy(true);setError('');try{const result=await api<Login>('/auth/login',undefined,{username,password});setSession(result);setPassword('');onAccess(result.token,result.user.role)}catch(e){setError((e as Error).message);setPassword('')}finally{setBusy(false)}}
+ async function signOut(){if(!session)return;setBusy(true);try{await api('/auth/logout',session.token,{});}catch(e){setError('Server sign-out was not confirmed: '+(e as Error).message)}finally{setSession(null);onAccess('','');setBusy(false)}}
+ return <section><p>Sign in with a local account. Sessions expire after 30 minutes and stay only in memory for this tab.</p>{error&&<p role="alert">{error}</p>}{session?<><p>Signed in as <strong>{session.user.username}</strong> · {session.user.role}<br/>Expires {new Date(session.expires_at).toLocaleTimeString()}</p><button className="secondary" disabled={busy} onClick={()=>void signOut()}>Sign out</button></>:<form onSubmit={event=>void signIn(event)}><label htmlFor="account-user">Username</label><input id="account-user" autoComplete="username" required value={username} onChange={e=>setUsername(e.target.value)}/><label htmlFor="account-password">Password</label><input id="account-password" type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={e=>setPassword(e.target.value)}/><button className="primary full" disabled={busy}>{busy?'Signing in…':'Sign in'}</button></form>}</section>
+}

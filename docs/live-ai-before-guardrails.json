@@ -1,0 +1,39 @@
+{
+  "verified_at": "2026-10-19T03:46:48.958949+00:00",
+  "model": "qwen2.5:7b-instruct",
+  "provider": "ollama",
+  "elapsed_seconds": 115.45,
+  "incident_id": "a58394a9-2b80-4f03-a7e4-2bfb5183912a",
+  "evidence_ids": [
+    "3eeeebd9-55ce-4408-a068-f1d089a30744",
+    "6beb00f9-7b2f-4974-94a7-d24af88694b2"
+  ],
+  "live_model_passed": true,
+  "finding": {
+    "summary": "During the deployment of 'demo-v2', the 'checkout' service experienced a readiness issue, though it was reported as healthy by Prometheus. The service had no incoming requests and no errors were recorded. The deployment was simulated and set to restart, with 119.97 seconds remaining before the next action.",
+    "probable_cause": "The service might be experiencing a readiness check failure due to the deployment process, even though the health check is reporting healthy. This could be a misconfiguration or a timing issue during the deployment.",
+    "confidence": "medium",
+    "confidence_meaning": "The evidence suggests a potential issue with the service's readiness during the deployment, but the health check is still reporting healthy, which adds complexity to the issue.",
+    "supporting_evidence_ids": [
+      "3eeeebd9-55ce-4408-a068-f1d089a30744",
+      "6beb00f9-7b2f-4974-94a7-d24af88694b2"
+    ],
+    "contradicting_evidence_ids": [],
+    "alternatives": [
+      "The service might be under heavy load or experiencing a different type of failure not captured by the health check.",
+      "There could be a misconfiguration in the readiness check logic."
+    ],
+    "next_steps": [
+      "Review the readiness check logic and ensure it aligns with the service's actual state.",
+      "Monitor the service's performance and logs during the deployment to identify any anomalies."
+    ],
+    "recommended_action": "investigate_more",
+    "risk": "low",
+    "expected_recovery": "within 120 seconds based on the remaining time in the deployment scenario",
+    "abort_conditions": "if the service becomes unresponsive or if the deployment fails to complete within the expected timeframe",
+    "limitations": [
+      "The health check might not be capturing all issues, especially if they are transient or related to the deployment process."
+    ]
+  },
+  "scope": "Retained real demo evidence; schema and citations validated, not a benchmark or causal-accuracy evaluation"
+}

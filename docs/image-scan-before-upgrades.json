@@ -1,0 +1,142 @@
+{
+  "scanned_at": "2026-10-19T04:33:27.357919+00:00",
+  "scanner": "Docker Scout",
+  "images": [
+    {
+      "image": "cloud-detective-ai-backend:latest",
+      "image_id": "sha256:65ea030eb7711feeb84bd60a766591b7103873286f21ea05ce3db30b6a5fa0bd",
+      "report": "docs/image-scans/cloud-detective-ai-backend-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 28,
+      "sarif_levels": {
+        "note": 26,
+        "warning": 1,
+        "error": 1
+      },
+      "severity_counts": {
+        "LOW": 26,
+        "MEDIUM": 1,
+        "HIGH": 1
+      },
+      "rules_with_known_fix": 0
+    },
+    {
+      "image": "cloud-detective-ai-frontend:latest",
+      "image_id": "sha256:c10655da6bbe98ec620a52a067bec4fe293b9721b67cf17daef9b85464b4b8ec",
+      "report": "docs/image-scans/cloud-detective-ai-frontend-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 165,
+      "sarif_levels": {
+        "none": 15,
+        "note": 15,
+        "warning": 46,
+        "error": 89
+      },
+      "severity_counts": {
+        "UNSPECIFIED": 15,
+        "LOW": 15,
+        "MEDIUM": 46,
+        "HIGH": 70,
+        "CRITICAL": 19
+      },
+      "rules_with_known_fix": 152
+    },
+    {
+      "image": "cloud-detective-ai-checkout:latest",
+      "image_id": "sha256:5d19c93cecc8723718b481e657892b3fe7a9b3b9f66a381a41904c330c13a70d",
+      "report": "docs/image-scans/cloud-detective-ai-checkout-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 28,
+      "sarif_levels": {
+        "note": 26,
+        "warning": 1,
+        "error": 1
+      },
+      "severity_counts": {
+        "LOW": 26,
+        "MEDIUM": 1,
+        "HIGH": 1
+      },
+      "rules_with_known_fix": 0
+    },
+    {
+      "image": "cloud-detective-ai-payment:latest",
+      "image_id": "sha256:8015e513222a8c243a427dafd871d9e3b762e50870decc2256613f94f91b03fa",
+      "report": "docs/image-scans/cloud-detective-ai-payment-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 28,
+      "sarif_levels": {
+        "note": 26,
+        "warning": 1,
+        "error": 1
+      },
+      "severity_counts": {
+        "LOW": 26,
+        "MEDIUM": 1,
+        "HIGH": 1
+      },
+      "rules_with_known_fix": 0
+    },
+    {
+      "image": "postgres:17-alpine",
+      "image_id": "sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24",
+      "report": "docs/image-scans/postgres-17-alpine.sarif.json",
+      "status": "SCANNED",
+      "findings": 72,
+      "sarif_levels": {
+        "note": 7,
+        "warning": 29,
+        "error": 36
+      },
+      "severity_counts": {
+        "LOW": 7,
+        "MEDIUM": 29,
+        "HIGH": 32,
+        "CRITICAL": 4
+      },
+      "rules_with_known_fix": 61
+    },
+    {
+      "image": "prom/prometheus:v3.5.0",
+      "image_id": "sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996",
+      "report": "docs/image-scans/prom-prometheus-v3.5.0.sarif.json",
+      "status": "SCANNED",
+      "findings": 128,
+      "sarif_levels": {
+        "none": 3,
+        "note": 7,
+        "warning": 51,
+        "error": 67
+      },
+      "severity_counts": {
+        "UNSPECIFIED": 3,
+        "LOW": 4,
+        "MEDIUM": 50,
+        "HIGH": 48,
+        "CRITICAL": 12
+      },
+      "rules_with_known_fix": 110
+    },
+    {
+      "image": "grafana/grafana:12.2.0",
+      "image_id": "sha256:74144189b38447facf737dfd0f3906e42e0776212bf575dc3334c3609183adf7",
+      "report": "docs/image-scans/grafana-grafana-12.2.0.sarif.json",
+      "status": "SCANNED",
+      "findings": 263,
+      "sarif_levels": {
+        "none": 6,
+        "note": 16,
+        "warning": 101,
+        "error": 140
+      },
+      "severity_counts": {
+        "UNSPECIFIED": 6,
+        "LOW": 13,
+        "MEDIUM": 97,
+        "HIGH": 105,
+        "CRITICAL": 27
+      },
+      "rules_with_known_fix": 219
+    }
+  ]
+}

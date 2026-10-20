@@ -1,0 +1,1337 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "fullName": "Docker Scout",
+          "informationUri": "https://docker.com/products/docker-scout",
+          "name": "docker scout",
+          "rules": [
+            {
+              "id": "GO-2026-5932",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "GO-2026-5932"
+              },
+              "helpUri": "https://scout.docker.com/v/GO-2026-5932?s=golang&n=crypto&ns=golang.org%2Fx&t=golang&vr=%3E%3D0",
+              "help": {
+                "text": "The golang.org/x/crypto/openpgp package is unsafe by design, has numerous known security issues, is not maintained, and should not be used.\n\nIf you are required to interoperate with OpenPGP systems and need a maintained package, consider github.com/ProtonMail/go-crypto/openpgp which is a maintained fork that aims to be a drop-in replacement for this package.\n",
+                "markdown": "> The golang.org/x/crypto/openpgp package is unsafe by design, has numerous known security issues, is not maintained, and should not be used.\n\nIf you are required to interoperate with OpenPGP systems and need a maintained package, consider github.com/ProtonMail/go-crypto/openpgp which is a maintained fork that aims to be a drop-in replacement for this package.\n\n|                                                       |\n|Package         pkg:golang/golang.org/x/crypto@0.55.0  |\n|Affected range  >=0                                    |\n|Fixed version   not fixed                              |\n"
+              },
+              "properties": {
+                "affected_version": ">=0",
+                "cvssV3_severity": "UNSPECIFIED",
+                "fixed_version": "not fixed",
+                "purls": [
+                  "pkg:golang/golang.org/x/crypto@0.55.0"
+                ],
+                "security-severity": "3.1",
+                "tags": [
+                  "UNSPECIFIED"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-81870",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-81870: Exposure of Sensitive Information to an Unauthorized Actor"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-81870?s=github&n=sdk&ns=go.opentelemetry.io%2Fotel&t=golang&vr=%3E%3D1.5.0%2C%3C%3D1.44.0",
+              "help": {
+                "text": "### Summary\n\nOpenTelemetry Go versions 1.5.0 through 1.44.0 can include trace exporter endpoint configuration in an internal diagnostic log emitted when an SDK `TracerProvider` is created. The default OpenTelemetry logger does not emit this event. Exposure requires an application to install a logger that enables OpenTelemetry's internal Info-level diagnostics and for someone other than the intended audience to have access to those logs.\n\nThe logged configuration can disclose the address of the trace collector and whether the OTLP/HTTP connection is configured as insecure. The Zipkin exporter logs its complete collector URL, so credentials in URL userinfo or tokens in the query string are also disclosed if an application embeds them there. OTLP authentication headers, TLS key material, and exported span data are not included in this log.\n\nExporter `MarshalLog` implementations that caused this configuration to be included in internal logs were introduced by [`a1fff3c`](https://github.com/open-telemetry/opentelemetry-go/commit/a1fff3c2588c783d1f3f6fd2315aa2660fc6d330).\n\n### Details\n\nWhen `sdk/trace.NewTracerProvider` constructs a provider, it records a `TracerProvider created` internal Info event containing the provider configuration. In affected versions, the configuration's `MarshalLog` methods recursively include:\n\n1. the provider's span processors;\n2. each processor's span exporter; and\n3. for the OTLP trace exporter, its client configuration.\n\nThis causes the following values to be present in the event:\n\n- OTLP trace gRPC: the configured endpoint;\n- OTLP trace HTTP: the configured endpoint and the `Insecure` flag; and\n- Zipkin: the complete collector URL.\n\nOpenTelemetry Go does not emit this event with its default logger, which only emits errors. An application must explicitly configure a sufficiently verbose logger with `otel.SetLogger`. The required `logr` verbosity is version-dependent:\n\n- versions 1.5.0 through 1.14.x use `V(1)` for this Info event; and\n- versions 1.15.0 through 1.44.0 use `V(4)`.\n\nOTLP header configuration is not part of the marshaled object, so credentials supplied with `WithHeaders` or the corresponding environment variables are not exposed. The documented OTLP `WithEndpoint` input is a collector address rather than a credential-bearing URL. The higher-risk case is therefore the Zipkin collector URL, which is retained and logged in full, or an application passing sensitive data in an OTLP endpoint outside the documented format.\n\n### Proof of concept\n\nThe following program demonstrates the behavior with OpenTelemetry Go 1.44.0. It deliberately places credentials and a token in the Zipkin collector URL and enables internal Info logging:\n\n```go\npackage main\n\nimport (\n\t\"bytes\"\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/go-logr/logr/funcr\"\n\t\"go.opentelemetry.io/otel\"\n\t\"go.opentelemetry.io/otel/exporters/zipkin\"\n\tsdktrace \"go.opentelemetry.io/otel/sdk/trace\"\n)\n\nfunc main() {\n\tvar logs bytes.Buffer\n\totel.SetLogger(funcr.New(func(_, args string) {\n\t\t_, _ = logs.WriteString(args)\n\t}, funcr.Options{Verbosity: 4}))\n\n\texporter, err := zipkin.New(\n\t\t\"http://user:pass@zipkin.internal:9411/api/v2/spans?token=secret\",\n\t)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\n\ttp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))\n\t_ = tp.Shutdown(context.Background())\n\n\tfmt.Println(logs.String())\n}\n```\n\nThe `TracerProvider created` event contains:\n\n```text\nhttp://user:pass@zipkin.internal:9411/api/v2/spans?token=secret\n```\n\nFor versions before 1.15.0, set `funcr.Options{Verbosity: 1}` instead.\n\n### Impact\n\nThis is a conditional disclosure through application logs. Affected applications must enable verbose OpenTelemetry internal diagnostics and configure a trace exporter containing information they do not intend to expose to readers of those logs. In that configuration, a person or system with log access can learn the trace collector address and internal network topology. If credentials or tokens are embedded directly in a Zipkin collector URL, those values can also be recovered from the logs.\n\nThere is no exposure with the default OpenTelemetry logger, and the vulnerable log is generated from local application configuration rather than remotely supplied span data. OTLP authentication headers, certificate or private-key contents, and telemetry payloads are not logged by this path.\n\n### Remediation\n\nUpgrade the affected OpenTelemetry Go modules to version 1.45.0 or later. The fix in [`3a1412d`](https://github.com/open-telemetry/opentelemetry-go/commit/3a1412d2b3bc4e4231fbeac2ed42117ae541bb38) stops recursively marshaling exporter and client configuration and records their types instead.\n\nIf an immediate upgrade is not possible:\n\n- keep OpenTelemetry internal logging below the Info verbosity described above;\n- do not embed credentials or tokens in exporter endpoint URLs; use authentication headers or another supported credential mechanism; and\n- restrict access to existing logs and rotate any credentials that may already have been recorded.\n",
+                "markdown": "> ### Summary\n\nOpenTelemetry Go versions 1.5.0 through 1.44.0 can include trace exporter endpoint configuration in an internal diagnostic log emitted when an SDK `TracerProvider` is created. The default OpenTelemetry logger does not emit this event. Exposure requires an application to install a logger that enables OpenTelemetry's internal Info-level diagnostics and for someone other than the intended audience to have access to those logs.\n\nThe logged configuration can disclose the address of the trace collector and whether the OTLP/HTTP connection is configured as insecure. The Zipkin exporter logs its complete collector URL, so credentials in URL userinfo or tokens in the query string are also disclosed if an application embeds them there. OTLP authentication headers, TLS key material, and exported span data are not included in this log.\n\nExporter `MarshalLog` implementations that caused this configuration to be included in internal logs were introduced by [`a1fff3c`](https://github.com/open-telemetry/opentelemetry-go/commit/a1fff3c2588c783d1f3f6fd2315aa2660fc6d330).\n\n### Details\n\nWhen `sdk/trace.NewTracerProvider` constructs a provider, it records a `TracerProvider created` internal Info event containing the provider configuration. In affected versions, the configuration's `MarshalLog` methods recursively include:\n\n1. the provider's span processors;\n2. each processor's span exporter; and\n3. for the OTLP trace exporter, its client configuration.\n\nThis causes the following values to be present in the event:\n\n- OTLP trace gRPC: the configured endpoint;\n- OTLP trace HTTP: the configured endpoint and the `Insecure` flag; and\n- Zipkin: the complete collector URL.\n\nOpenTelemetry Go does not emit this event with its default logger, which only emits errors. An application must explicitly configure a sufficiently verbose logger with `otel.SetLogger`. The required `logr` verbosity is version-dependent:\n\n- versions 1.5.0 through 1.14.x use `V(1)` for this Info event; and\n- versions 1.15.0 through 1.44.0 use `V(4)`.\n\nOTLP header configuration is not part of the marshaled object, so credentials supplied with `WithHeaders` or the corresponding environment variables are not exposed. The documented OTLP `WithEndpoint` input is a collector address rather than a credential-bearing URL. The higher-risk case is therefore the Zipkin collector URL, which is retained and logged in full, or an application passing sensitive data in an OTLP endpoint outside the documented format.\n\n### Proof of concept\n\nThe following program demonstrates the behavior with OpenTelemetry Go 1.44.0. It deliberately places credentials and a token in the Zipkin collector URL and enables internal Info logging:\n\n```go\npackage main\n\nimport (\n\t\"bytes\"\n\t\"context\"\n\t\"fmt\"\n\n\t\"github.com/go-logr/logr/funcr\"\n\t\"go.opentelemetry.io/otel\"\n\t\"go.opentelemetry.io/otel/exporters/zipkin\"\n\tsdktrace \"go.opentelemetry.io/otel/sdk/trace\"\n)\n\nfunc main() {\n\tvar logs bytes.Buffer\n\totel.SetLogger(funcr.New(func(_, args string) {\n\t\t_, _ = logs.WriteString(args)\n\t}, funcr.Options{Verbosity: 4}))\n\n\texporter, err := zipkin.New(\n\t\t\"http://user:pass@zipkin.internal:9411/api/v2/spans?token=secret\",\n\t)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\n\ttp := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))\n\t_ = tp.Shutdown(context.Background())\n\n\tfmt.Println(logs.String())\n}\n```\n\nThe `TracerProvider created` event contains:\n\n```text\nhttp://user:pass@zipkin.internal:9411/api/v2/spans?token=secret\n```\n\nFor versions before 1.15.0, set `funcr.Options{Verbosity: 1}` instead.\n\n### Impact\n\nThis is a conditional disclosure through application logs. Affected applications must enable verbose OpenTelemetry internal diagnostics and configure a trace exporter containing information they do not intend to expose to readers of those logs. In that configuration, a person or system with log access can learn the trace collector address and internal network topology. If credentials or tokens are embedded directly in a Zipkin collector URL, those values can also be recovered from the logs.\n\nThere is no exposure with the default OpenTelemetry logger, and the vulnerable log is generated from local application configuration rather than remotely supplied span data. OTLP authentication headers, certificate or private-key contents, and telemetry payloads are not logged by this path.\n\n### Remediation\n\nUpgrade the affected OpenTelemetry Go modules to version 1.45.0 or later. The fix in [`3a1412d`](https://github.com/open-telemetry/opentelemetry-go/commit/3a1412d2b3bc4e4231fbeac2ed42117ae541bb38) stops recursively marshaling exporter and client configuration and records their types instead.\n\nIf an immediate upgrade is not possible:\n\n- keep OpenTelemetry internal logging below the Info verbosity described above;\n- do not embed credentials or tokens in exporter endpoint URLs; use authentication headers or another supported credential mechanism; and\n- restrict access to existing logs and rotate any credentials that may already have been recorded.\n\n|                                                                                                                                                  |\n|Package                                                                                           pkg:golang/go.opentelemetry.io/otel/sdk@1.44.0  |\n|Affected range                                                                                    >=1.5.0,<=1.44.0                                |\n|Fixed version                                                                                     1.45.0                                          |\n|[[CVSS Score 2.0] [CVSS Vector CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N]]                                                  |\n"
+              },
+              "properties": {
+                "affected_version": ">=1.5.0,<=1.44.0",
+                "cvssV3": 2,
+                "cvssV3_severity": "LOW",
+                "cvssV3_vector": "CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+                "fixed_version": "1.45.0",
+                "purls": [
+                  "pkg:golang/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@1.44.0",
+                  "pkg:golang/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@1.44.0",
+                  "pkg:golang/go.opentelemetry.io/otel/exporters/otlp/otlptrace@1.44.0",
+                  "pkg:golang/go.opentelemetry.io/otel/sdk@1.44.0"
+                ],
+                "security-severity": "2.0",
+                "tags": [
+                  "LOW"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2020-8912",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2020-8912"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2020-8912?s=golang&n=aws-sdk-go&ns=github.com%2Faws&t=golang&vr=%3E%3D0",
+              "help": {
+                "text": "A vulnerability in the in-band key negotiation exists in the AWS S3 Crypto SDK for GoLang versions prior to V2. An attacker with write access to the targeted bucket can change the encryption algorithm of an object in the bucket, which can then allow them to change AES-GCM to AES-CTR. Using this in combination with a decryption oracle can reveal the authentication key used by AES-GCM as decrypting the GMAC tag leaves the authentication key recoverable as an algebraic equation. It is recommended to update your SDK to V2 or later, and re-encrypt your files.\n",
+                "markdown": "> A vulnerability in the in-band key negotiation exists in the AWS S3 Crypto SDK for GoLang versions prior to V2. An attacker with write access to the targeted bucket can change the encryption algorithm of an object in the bucket, which can then allow them to change AES-GCM to AES-CTR. Using this in combination with a decryption oracle can reveal the authentication key used by AES-GCM as decrypting the GMAC tag leaves the authentication key recoverable as an algebraic equation. It is recommended to update your SDK to V2 or later, and re-encrypt your files.\n\n|                                                             |\n|Package         pkg:golang/github.com/aws/aws-sdk-go@1.55.8  |\n|Affected range  >=0                                          |\n|Fixed version   not fixed                                    |\n"
+              },
+              "properties": {
+                "affected_version": ">=0",
+                "cvssV3_severity": "LOW",
+                "fixed_version": "not fixed",
+                "purls": [
+                  "pkg:golang/github.com/aws/aws-sdk-go@1.55.8"
+                ],
+                "security-severity": "2.5",
+                "tags": [
+                  "LOW"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-44903",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-44903: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-44903?s=github&n=prometheus&ns=github.com%2Fprometheus&t=golang&vr=%3C0.311.3",
+              "help": {
+                "text": "### Impact\n\nIn the Prometheus server's legacy web UI (enabled via the command-line flag `--enable-feature=old-ui`), the histogram heatmap chart view does not escape `le` label values when inserting them into the HTML for use as axis tick mark labels.\n\nAn attacker who can inject crafted metrics (e.g. via a compromised scrape target, remote write, or OTLP receiver endpoint) can execute JavaScript in the browser of any Prometheus user who views the metric in the heatmap chart UI. From the XSS context, an attacker could for example:\n\n- Read `/api/v1/status/config` to extract sensitive configuration (although credentials / secrets are redacted by the server)\n- Call `/-/quit` to shut down Prometheus (only if `--web.enable-lifecycle` is set)\n- Call `/api/v1/admin/tsdb/delete_series` to delete data (only if `--web.enable-admin-api` is set)\n- Exfiltrate metric data to an external server\n\nNote that this only affects users who have explicitly enabled the legacy Prometheus web UI using the `--enable-feature=old-ui` command-line flag.\n\n### Patches\n\nhttps://github.com/prometheus/prometheus/commit/38f23b9075ced1de2b82d2dad8b2bebb1ecd5b7d\n\n### Workarounds\n\nIf at all possible, disable the legacy web UI by removing the `--enable-feature=old-ui` command-line flag).\n\nIf this is not an option, take the following precautions:\n\n- If using the remote write receiver (`--web.enable-remote-write-receiver`), ensure it is not exposed to untrusted sources.\n- If using the OTLP receiver (`--web.enable-otlp-receiver`), ensure it is not exposed to untrusted sources.\n- Ensure scrape targets are trusted and not under attacker control.\n- Do not enable admin / mutating API endpoints (e.g. `--web.enable-admin-api` or `web.enable-lifecycle`) in cases where you cannot prevent untrusted data from being ingested.\n- Users should avoid clicking untrusted links, especially those containing functions such as `label_replace`, as they may generate poisoned label names and values.\n\n### References\n\n- CVE-2019-10215 — prior stored DOM XSS vulnerability in Prometheus query history, fixed in v2.7.2\n- CVE-2026-40179 — prior stored DOM XSS vulnerability in Prometheus web UI (hover tooltips and metrics explorer), fixed in v3.11.2\n",
+                "markdown": "> ### Impact\n\nIn the Prometheus server's legacy web UI (enabled via the command-line flag `--enable-feature=old-ui`), the histogram heatmap chart view does not escape `le` label values when inserting them into the HTML for use as axis tick mark labels.\n\nAn attacker who can inject crafted metrics (e.g. via a compromised scrape target, remote write, or OTLP receiver endpoint) can execute JavaScript in the browser of any Prometheus user who views the metric in the heatmap chart UI. From the XSS context, an attacker could for example:\n\n- Read `/api/v1/status/config` to extract sensitive configuration (although credentials / secrets are redacted by the server)\n- Call `/-/quit` to shut down Prometheus (only if `--web.enable-lifecycle` is set)\n- Call `/api/v1/admin/tsdb/delete_series` to delete data (only if `--web.enable-admin-api` is set)\n- Exfiltrate metric data to an external server\n\nNote that this only affects users who have explicitly enabled the legacy Prometheus web UI using the `--enable-feature=old-ui` command-line flag.\n\n### Patches\n\nhttps://github.com/prometheus/prometheus/commit/38f23b9075ced1de2b82d2dad8b2bebb1ecd5b7d\n\n### Workarounds\n\nIf at all possible, disable the legacy web UI by removing the `--enable-feature=old-ui` command-line flag).\n\nIf this is not an option, take the following precautions:\n\n- If using the remote write receiver (`--web.enable-remote-write-receiver`), ensure it is not exposed to untrusted sources.\n- If using the OTLP receiver (`--web.enable-otlp-receiver`), ensure it is not exposed to untrusted sources.\n- Ensure scrape targets are trusted and not under attacker control.\n- Do not enable admin / mutating API endpoints (e.g. `--web.enable-admin-api` or `web.enable-lifecycle`) in cases where you cannot prevent untrusted data from being ingested.\n- Users should avoid clicking untrusted links, especially those containing functions such as `label_replace`, as they may generate poisoned label names and values.\n\n### References\n\n- CVE-2019-10215 — prior stored DOM XSS vulnerability in Prometheus query history, fixed in v2.7.2\n- CVE-2026-40179 — prior stored DOM XSS vulnerability in Prometheus web UI (hover tooltips and metrics explorer), fixed in v3.11.2\n\n|                                                                                                                                                                                         |\n|Package                                                                                           pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty  |\n|Affected range                                                                                    <0.311.3                                                                               |\n|Fixed version                                                                                     0.311.3                                                                                |\n|[[CVSS Score 5.1] [CVSS Vector CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:N]]                                                                                         |\n"
+              },
+              "properties": {
+                "affected_version": "<0.311.3",
+                "cvssV3": 5.1,
+                "cvssV3_severity": "MEDIUM",
+                "cvssV3_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:N",
+                "fixed_version": "0.311.3",
+                "purls": [
+                  "pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty"
+                ],
+                "security-severity": "5.1",
+                "tags": [
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-40179",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-40179: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-40179?s=github&n=prometheus&ns=github.com%2Fprometheus&t=golang&vr=%3C0.311.2-0.20260410083055-07c6232d159b",
+              "help": {
+                "text": "### Impact\n\nStored cross-site scripting (XSS) via crafted metric names in the Prometheus web UI:\n\n* **Old React UI + New Mantine UI:** When a user hovers over a chart tooltip on the Graph page, metric names containing HTML/JavaScript are injected into `innerHTML` without escaping, causing arbitrary script execution in the user's browser.\n* **Old React UI only:** When a user opens the Metric Explorer (globe icon next to the PromQL expression input field), and a metric name containing HTML/JavaScript is rendered in the fuzzy search results, it is injected into `innerHTML` without escaping, causing arbitrary script execution in the user's browser.\n* **Old React UI only:** When a user views a heatmap chart and hovers over a cell, the `le` label values of the underlying histogram buckets are interpolated into `innerHTML` without escaping. While `le` is conventionally a numeric bucket boundary, Prometheus does not enforce this — arbitrary UTF-8 strings are accepted as label values, allowing script injection via a crafted scrape target or remote write.\n\nWith Prometheus v3.x defaulting to UTF-8 metric and label name validation, characters like `<`, `>`, and `\"` are now valid in metric names and labels, making this exploitable.\n\nAn attacker who can inject metrics (via a compromised scrape target, remote write, or OTLP receiver endpoint) can execute JavaScript in the browser of any Prometheus user who views the metric in the Graph UI. From the XSS context, an attacker could for example:\n\n- Read `/api/v1/status/config` to extract sensitive configuration (although credentials / secrets are redacted by the server)\n- Call `/-/quit` to shut down Prometheus (only if `--web.enable-lifecycle` is set)\n- Call `/api/v1/admin/tsdb/delete_series` to delete data (only if `--web.enable-admin-api` is set)\n- Exfiltrate metric data to an external server\n\nBoth the new Mantine UI and the old React UI are affected. The vulnerable code paths are:\n\n- `web/ui/mantine-ui/src/pages/query/uPlotChartHelpers.ts` — tooltip `innerHTML` with unescaped `labels.__name__`\n- `web/ui/react-app/src/pages/graph/GraphHelpers.ts` — tooltip content with unescaped `labels.__name__`\n- `web/ui/react-app/src/pages/graph/MetricsExplorer.tsx` — fuzzy search results rendered via `dangerouslySetInnerHTML` without sanitization\n- `web/ui/react-app/src/vendor/flot/jquery.flot.heatmap.js` — heatmap tooltip with unescaped label values\n\n### Patches\n\nA patch has been published in Prometheus 3.5.2 LTS and Prometheus 3.11.2. The fix applies `escapeHTML()` to all user-controlled values (metric names and label values) before inserting them into `innerHTML`. This advisory will be updated with the patched version once released.\n\n### Workarounds\n\n- If using the remote write receiver (`--web.enable-remote-write-receiver`), ensure it is not exposed to untrusted sources.\n- If using the OTLP receiver (`--web.enable-otlp-receiver`), ensure it is not exposed to untrusted sources.\n- Ensure scrape targets are trusted and not under attacker control.\n- Do not enable admin / mutating API endpoints (e.g. `--web.enable-admin-api` or `web.enable-lifecycle`) in cases where you cannot prevent untrusted data from being ingested.\n- Users should avoid clicking untrusted links, especially those containing functions such as label_replace, as they may generate poisoned label names and values.\n\n### References\n\n- CVE-2019-10215 — prior stored DOM XSS vulnerability in Prometheus query history, fixed in v2.7.2\n\n### Acknowledgements\n\nThanks to @gladiator9797 (Duc Anh Nguyen from TinyxLab) for reporting this.\n",
+                "markdown": "> ### Impact\n\nStored cross-site scripting (XSS) via crafted metric names in the Prometheus web UI:\n\n* **Old React UI + New Mantine UI:** When a user hovers over a chart tooltip on the Graph page, metric names containing HTML/JavaScript are injected into `innerHTML` without escaping, causing arbitrary script execution in the user's browser.\n* **Old React UI only:** When a user opens the Metric Explorer (globe icon next to the PromQL expression input field), and a metric name containing HTML/JavaScript is rendered in the fuzzy search results, it is injected into `innerHTML` without escaping, causing arbitrary script execution in the user's browser.\n* **Old React UI only:** When a user views a heatmap chart and hovers over a cell, the `le` label values of the underlying histogram buckets are interpolated into `innerHTML` without escaping. While `le` is conventionally a numeric bucket boundary, Prometheus does not enforce this — arbitrary UTF-8 strings are accepted as label values, allowing script injection via a crafted scrape target or remote write.\n\nWith Prometheus v3.x defaulting to UTF-8 metric and label name validation, characters like `<`, `>`, and `\"` are now valid in metric names and labels, making this exploitable.\n\nAn attacker who can inject metrics (via a compromised scrape target, remote write, or OTLP receiver endpoint) can execute JavaScript in the browser of any Prometheus user who views the metric in the Graph UI. From the XSS context, an attacker could for example:\n\n- Read `/api/v1/status/config` to extract sensitive configuration (although credentials / secrets are redacted by the server)\n- Call `/-/quit` to shut down Prometheus (only if `--web.enable-lifecycle` is set)\n- Call `/api/v1/admin/tsdb/delete_series` to delete data (only if `--web.enable-admin-api` is set)\n- Exfiltrate metric data to an external server\n\nBoth the new Mantine UI and the old React UI are affected. The vulnerable code paths are:\n\n- `web/ui/mantine-ui/src/pages/query/uPlotChartHelpers.ts` — tooltip `innerHTML` with unescaped `labels.__name__`\n- `web/ui/react-app/src/pages/graph/GraphHelpers.ts` — tooltip content with unescaped `labels.__name__`\n- `web/ui/react-app/src/pages/graph/MetricsExplorer.tsx` — fuzzy search results rendered via `dangerouslySetInnerHTML` without sanitization\n- `web/ui/react-app/src/vendor/flot/jquery.flot.heatmap.js` — heatmap tooltip with unescaped label values\n\n### Patches\n\nA patch has been published in Prometheus 3.5.2 LTS and Prometheus 3.11.2. The fix applies `escapeHTML()` to all user-controlled values (metric names and label values) before inserting them into `innerHTML`. This advisory will be updated with the patched version once released.\n\n### Workarounds\n\n- If using the remote write receiver (`--web.enable-remote-write-receiver`), ensure it is not exposed to untrusted sources.\n- If using the OTLP receiver (`--web.enable-otlp-receiver`), ensure it is not exposed to untrusted sources.\n- Ensure scrape targets are trusted and not under attacker control.\n- Do not enable admin / mutating API endpoints (e.g. `--web.enable-admin-api` or `web.enable-lifecycle`) in cases where you cannot prevent untrusted data from being ingested.\n- Users should avoid clicking untrusted links, especially those containing functions such as label_replace, as they may generate poisoned label names and values.\n\n### References\n\n- CVE-2019-10215 — prior stored DOM XSS vulnerability in Prometheus query history, fixed in v2.7.2\n\n### Acknowledgements\n\nThanks to @gladiator9797 (Duc Anh Nguyen from TinyxLab) for reporting this.\n\n|                                                                                                                                                                                         |\n|Package                                                                                           pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty  |\n|Affected range                                                                                    <0.311.2-0.20260410083055-07c6232d159b                                                 |\n|Fixed version                                                                                     0.311.2-0.20260410083055-07c6232d159b                                                  |\n|[[CVSS Score 5.3] [CVSS Vector CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:N]]                                                                                         |\n"
+              },
+              "properties": {
+                "affected_version": "<0.311.2-0.20260410083055-07c6232d159b",
+                "cvssV3": 5.3,
+                "cvssV3_severity": "MEDIUM",
+                "cvssV3_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:N",
+                "fixed_version": "0.311.2-0.20260410083055-07c6232d159b",
+                "purls": [
+                  "pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty"
+                ],
+                "security-severity": "5.3",
+                "tags": [
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2020-8911",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2020-8911"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2020-8911?s=golang&n=aws-sdk-go&ns=github.com%2Faws&t=golang&vr=%3E%3D0",
+              "help": {
+                "text": "A padding oracle vulnerability exists in the AWS S3 Crypto SDK for GoLang versions prior to V2. The SDK allows users to encrypt files with AES-CBC without computing a Message Authentication Code (MAC), which then allows an attacker who has write access to the target's S3 bucket and can observe whether or not an endpoint with access to the key can decrypt a file, they can reconstruct the plaintext with (on average) 128*length (plaintext) queries to the endpoint, by exploiting CBC's ability to manipulate the bytes of the next block and PKCS5 padding errors. It is recommended to update your SDK to V2 or later, and re-encrypt your files.\n",
+                "markdown": "> A padding oracle vulnerability exists in the AWS S3 Crypto SDK for GoLang versions prior to V2. The SDK allows users to encrypt files with AES-CBC without computing a Message Authentication Code (MAC), which then allows an attacker who has write access to the target's S3 bucket and can observe whether or not an endpoint with access to the key can decrypt a file, they can reconstruct the plaintext with (on average) 128*length (plaintext) queries to the endpoint, by exploiting CBC's ability to manipulate the bytes of the next block and PKCS5 padding errors. It is recommended to update your SDK to V2 or later, and re-encrypt your files.\n\n|                                                             |\n|Package         pkg:golang/github.com/aws/aws-sdk-go@1.55.8  |\n|Affected range  >=0                                          |\n|Fixed version   not fixed                                    |\n"
+              },
+              "properties": {
+                "affected_version": ">=0",
+                "cvssV3_severity": "MEDIUM",
+                "fixed_version": "not fixed",
+                "purls": [
+                  "pkg:golang/github.com/aws/aws-sdk-go@1.55.8"
+                ],
+                "security-severity": "5.6",
+                "tags": [
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-94448",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-94448"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-94448?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "When a JavaScript template literal contains consecutive expressions, the context tracking state was not properly reset upon entering a new expression.\n\nWe now ensure that template-literal expression entries correctly reset context variables so all subsequent regular expression literals are accurately recognized and escaped.\n",
+                "markdown": "> When a JavaScript template literal contains consecutive expressions, the context tracking state was not properly reset upon entering a new expression.\n\nWe now ensure that template-literal expression entries correctly reset context variables so all subsequent regular expression literals are accurately recognized and escaped.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "MEDIUM",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "6.1",
+                "tags": [
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-97030",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-97030"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-97030?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "A trusted template author may have previously written a valid template wherein the use of the 'yield' keyword would not be correctly escaped.\n\nWe now ensure that valid keyword uses are escaped and non-keyword uses are not escaped.\n",
+                "markdown": "> A trusted template author may have previously written a valid template wherein the use of the 'yield' keyword would not be correctly escaped.\n\nWe now ensure that valid keyword uses are escaped and non-keyword uses are not escaped.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "MEDIUM",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "6.1",
+                "tags": [
+                  "MEDIUM"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-42154",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-42154: Uncontrolled Resource Consumption"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-42154?s=github&n=prometheus&ns=github.com%2Fprometheus&t=golang&vr=%3C0.305.2",
+              "help": {
+                "text": "### Impact\n\nThe remote read endpoint (`/api/v1/read`) does not validate the declared decoded length in a snappy-compressed request body before allocating memory.\nAn unauthenticated attacker can send a small payload that causes a huge heap allocation per request. Under concurrent load this can exhaust available memory and crash the Prometheus process.\n\n### Patches\n_Has the problem been patched? What versions should users upgrade to?_\n\nFixed in 3.11.3 and 3.5.3 LTS. Users should upgrade to these versions or later.\n\n### Workarounds\nUser who can not upgrade can place Prometheus behind a reverse proxy or firewall that requires authentication before requests reach /api/v1/read.\n",
+                "markdown": "> ### Impact\n\nThe remote read endpoint (`/api/v1/read`) does not validate the declared decoded length in a snappy-compressed request body before allocating memory.\nAn unauthenticated attacker can send a small payload that causes a huge heap allocation per request. Under concurrent load this can exhaust available memory and crash the Prometheus process.\n\n### Patches\n_Has the problem been patched? What versions should users upgrade to?_\n\nFixed in 3.11.3 and 3.5.3 LTS. Users should upgrade to these versions or later.\n\n### Workarounds\nUser who can not upgrade can place Prometheus behind a reverse proxy or firewall that requires authentication before requests reach /api/v1/read.\n\n|                                                                                                                                                                      |\n|Package                                                                        pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty  |\n|Affected range                                                                 <0.305.2                                                                               |\n|Fixed version                                                                  0.305.2                                                                                |\n|[[CVSS Score 7.5] [CVSS Vector CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H]]                                                                                         |\n"
+              },
+              "properties": {
+                "affected_version": "<0.305.2",
+                "cvssV3": 7.5,
+                "cvssV3_severity": "HIGH",
+                "cvssV3_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+                "fixed_version": "0.305.2",
+                "purls": [
+                  "pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-56855",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-56855"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-56855?s=golang&n=crypto&ns=golang.org%2Fx&t=golang&vr=%3C0.56.0",
+              "help": {
+                "text": "Previously, after a channel has been established, a malicious peer could send crafted messages that would deadlock the entire connection.\n\nNow, we handle all RFC 4254 channel messages; global requests are handled explicitly. Then, treat all other messages as a protocol error and tear the connection down instead of buffering and blocking.\n",
+                "markdown": "> Previously, after a channel has been established, a malicious peer could send crafted messages that would deadlock the entire connection.\n\nNow, we handle all RFC 4254 channel messages; global requests are handled explicitly. Then, treat all other messages as a protocol error and tear the connection down instead of buffering and blocking.\n\n|                                                       |\n|Package         pkg:golang/golang.org/x/crypto@0.55.0  |\n|Affected range  <0.56.0                                |\n|Fixed version   0.56.0                                 |\n"
+              },
+              "properties": {
+                "affected_version": "<0.56.0",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "0.56.0",
+                "purls": [
+                  "pkg:golang/golang.org/x/crypto@0.55.0"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-56866",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-56866"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-56866?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "When http.Transport sends an HTTP/1 CONNECT request with a non-empty Request.Body, it writes the body directly to the connection without framing after the request headers. If the server rejects the CONNECT request with a non-2xx keep-alive response, Transport returns the connection to the idle pool. Because CONNECT requests do not have a request body, the server may interpret the trailing body bytes as a subsequent pipelined HTTP/1.1 request on the connection, leaving the pooled connection desynchronized and causing the next caller that reuses it to read the response to the injected request. In reverse proxies (including httputil.ReverseProxy) that forward CONNECT requests through a shared Transport, this can lead to cross-user response poisoning.\n",
+                "markdown": "> When http.Transport sends an HTTP/1 CONNECT request with a non-empty Request.Body, it writes the body directly to the connection without framing after the request headers. If the server rejects the CONNECT request with a non-2xx keep-alive response, Transport returns the connection to the idle pool. Because CONNECT requests do not have a request body, the server may interpret the trailing body bytes as a subsequent pipelined HTTP/1.1 request on the connection, leaving the pooled connection desynchronized and causing the next caller that reuses it to read the response to the injected request. In reverse proxies (including httputil.ReverseProxy) that forward CONNECT requests through a shared Transport, this can lead to cross-user response poisoning.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-78659",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-78659"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-78659?s=golang&n=net&ns=golang.org%2Fx&t=golang&vr=%3C0.60.0",
+              "help": {
+                "text": "When \"Trailer\" headers are sent by a client, the HTTP server internally uses the header values to populate the Request.Trailer map passed to the server handler. Because Request.Trailer is a map, each entry incurs memory overhead. For HTTP/2 servers, a malicious client can exploit this by sending a \"Trailer\" header that declares a large number of fields, causing the server to allocate a disproportionate amount of memory while bypassing Server.MaxHeaderValueCount and Server.MaxHeaderBytes limits. This exploit is not applicable for HTTP/1 servers, which do not support multiplexing a large number of requests over one TCP connection, and whose Server.MaxHeaderBytes are calculated differently.\n",
+                "markdown": "> When \"Trailer\" headers are sent by a client, the HTTP server internally uses the header values to populate the Request.Trailer map passed to the server handler. Because Request.Trailer is a map, each entry incurs memory overhead. For HTTP/2 servers, a malicious client can exploit this by sending a \"Trailer\" header that declares a large number of fields, causing the server to allocate a disproportionate amount of memory while bypassing Server.MaxHeaderValueCount and Server.MaxHeaderBytes limits. This exploit is not applicable for HTTP/1 servers, which do not support multiplexing a large number of requests over one TCP connection, and whose Server.MaxHeaderBytes are calculated differently.\n\n|                                                    |\n|Package         pkg:golang/golang.org/x/net@0.57.0  |\n|Affected range  <0.60.0                             |\n|Fixed version   0.60.0                              |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/golang.org/x/net@0.57.0",
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-78660",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-78660"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-78660?s=golang&n=net&ns=golang.org%2Fx&t=golang&vr=%3C0.60.0",
+              "help": {
+                "text": "Historically, we have been rather lax about malformed framing-related headers in our HTTP/2 implementation, as they cannot interfere with HTTP/2 framing. However, this makes it possible for our HTTP/2 implementation to forward responses containing such headers to an HTTP/1 client when acting as a reverse proxy. If the HTTP/1 client also does not behave strictly enough, this can result in response smuggling.\n",
+                "markdown": "> Historically, we have been rather lax about malformed framing-related headers in our HTTP/2 implementation, as they cannot interfere with HTTP/2 framing. However, this makes it possible for our HTTP/2 implementation to forward responses containing such headers to an HTTP/1 client when acting as a reverse proxy. If the HTTP/1 client also does not behave strictly enough, this can result in response smuggling.\n\n|                                                    |\n|Package         pkg:golang/golang.org/x/net@0.57.0  |\n|Affected range  <0.60.0                             |\n|Fixed version   0.60.0                              |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/golang.org/x/net@0.57.0",
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-78662",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-78662"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-78662?s=golang&n=crypto&ns=golang.org%2Fx&t=golang&vr=%3C0.56.0",
+              "help": {
+                "text": "Previously, a channel registered in the mux's chanList is not usable until it is established. A malicious peer was able flood the channel's incomingRequests, deadlocking the entire connection.\n\nNow, we add an atomic established state, set when a channel becomes usable. Until such a time, handlePacket drops every packet other than the open confirmation/failure, without blocking and without tearing down the connection.\n",
+                "markdown": "> Previously, a channel registered in the mux's chanList is not usable until it is established. A malicious peer was able flood the channel's incomingRequests, deadlocking the entire connection.\n\nNow, we add an atomic established state, set when a channel becomes usable. Until such a time, handlePacket drops every packet other than the open confirmation/failure, without blocking and without tearing down the connection.\n\n|                                                       |\n|Package         pkg:golang/golang.org/x/crypto@0.55.0  |\n|Affected range  <0.56.0                                |\n|Fixed version   0.56.0                                 |\n"
+              },
+              "properties": {
+                "affected_version": "<0.56.0",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "0.56.0",
+                "purls": [
+                  "pkg:golang/golang.org/x/crypto@0.55.0"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-78667",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-78667"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-78667?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "When parsing a Range header containing a large number of small ranges, FileServer(FS), ServeContent, and ServeFile(FS) can consume an excessive amount of CPU.\n",
+                "markdown": "> When parsing a Range header containing a large number of small ranges, FileServer(FS), ServeContent, and ServeFile(FS) can consume an excessive amount of CPU.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-78669",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-78669"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-78669?s=golang&n=net&ns=golang.org%2Fx&t=golang&vr=%3C0.60.0",
+              "help": {
+                "text": "A malicious HTTP/2 peer can cause excessive CPU consumption in the client or server by opening a large number of streams and then sending many small SETTINGS frames containing SETTINGS_INITIAL_WINDOW_SIZE values.\n",
+                "markdown": "> A malicious HTTP/2 peer can cause excessive CPU consumption in the client or server by opening a large number of streams and then sending many small SETTINGS frames containing SETTINGS_INITIAL_WINDOW_SIZE values.\n\n|                                                    |\n|Package         pkg:golang/golang.org/x/net@0.57.0  |\n|Affected range  <0.60.0                             |\n|Fixed version   0.60.0                              |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/golang.org/x/net@0.57.0",
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-94439",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-94439"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-94439?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "When an HTTP server handler sends a 2xx response to an HTTP/1 CONNECT request and returns without hijacking the connection, the server improperly continues to read and serve requests from the connection. Since a 2xx response to an HTTP/1 CONNECT converts the connection into a tunnel, the server should not treat the connection as continuing to contain HTTP.\n\nThe impact of this misbehavior is mostly limited to potential request smuggling, where an intermediate proxy considers the data on the connection to be tunneled and the server considers it to be HTTP.\n",
+                "markdown": "> When an HTTP server handler sends a 2xx response to an HTTP/1 CONNECT request and returns without hijacking the connection, the server improperly continues to read and serve requests from the connection. Since a 2xx response to an HTTP/1 CONNECT converts the connection into a tunnel, the server should not treat the connection as continuing to contain HTTP.\n\nThe impact of this misbehavior is mostly limited to potential request smuggling, where an intermediate proxy considers the data on the connection to be tunneled and the server considers it to be HTTP.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-94440",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-94440"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-94440?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "Parsing a multipart form can bypass memory limits and read an arbitrarily long line into memory when the remaining limit at the start of a part is less than 400 bytes.\n",
+                "markdown": "> Parsing a multipart form can bypass memory limits and read an arbitrarily long line into memory when the remaining limit at the start of a part is less than 400 bytes.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-97031",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-97031"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-97031?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "Multiple ECH outer extension references are not permitted under RFC 9849; previously, a client could send a well-crafted packet that could trigger memory exhaustion in the server process by specifying multiple references.\n\nWe now reject these as malformed and curb the memory amplification vector as a result.\n",
+                "markdown": "> Multiple ECH outer extension references are not permitted under RFC 9849; previously, a client could send a well-crafted packet that could trigger memory exhaustion in the server process by specifying multiple references.\n\nWe now reject these as malformed and curb the memory amplification vector as a result.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-97032",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-97032"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-97032?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "HTTP/2 servers could end up crashing due to inadvertently modifying its HPACK encoder concurrently. This happens because the server modifies the HPACK encoder from two goroutines without synchronization: one uses the encoder to encode a HEADERS frame as part of a response sent to a client and the other modifies the encoder's table size when handling a SETTINGS frame containing SETTINGS_HEADER_TABLE_SIZE that a client sends. A malicious client can repeatedly send a request while changing the header table size to crash the server.\n",
+                "markdown": "> HTTP/2 servers could end up crashing due to inadvertently modifying its HPACK encoder concurrently. This happens because the server modifies the HPACK encoder from two goroutines without synchronization: one uses the encoder to encode a HEADERS frame as part of a response sent to a client and the other modifies the encoder's table size when handling a SETTINGS frame containing SETTINGS_HEADER_TABLE_SIZE that a client sends. A malicious client can repeatedly send a request while changing the header table size to crash the server.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<0.60.0",
+                "cvssV3_severity": "HIGH",
+                "fixed_version": "0.60.0",
+                "purls": [
+                  "pkg:golang/golang.org/x/net@0.57.0",
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "7.5",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-84445",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-84445: Improper Validation of Array Index"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-84445?s=github&n=grpc&ns=google.golang.org&t=golang&vr=%3E%3D1.83.0%2C%3C1.83.2",
+              "help": {
+                "text": "A vulnerability exists in gRPC-Go servers configured with `xds.NewGRPCServer()` where a crafted request missing both `:authority` and `Host` headers can cause a server panic, resulting in a Denial of Service (DoS).\n\nServers built with `xds.NewGRPCServer` install an xDS routing interceptor on every RPC. This interceptor looks up the request’s `:authority` header to pick a virtual host. The HTTP/2 server transport previously accepted requests that had neither `:authority` nor `Host`. When this happened, the xDS routing interceptor attempted to access the first element of an empty slice of authorities, leading to an index out of bounds panic. Since the per-RPC goroutine does not recover from panics, the entire server process would terminate.\n\nThis panic occurs in the interceptor pipeline, meaning the transport credentials handshake (TLS, mTLS, or ALTS) and HTTP/2 connection establishment must complete successfully before the crafted request can reach this logic.\n- Insecure/Standard TLS: If the server permits insecure (plaintext) connections or standard credentials (where client certs are not checked), any unauthenticated remote attacker can trigger the crash.\n- mTLS / ALTS: If strict transport-level authentication is enforced at the network edge or transport layer (e.g., requiring a valid client certificate), the attacker must possess valid transport credentials to initiate the stream and trigger the panic.\n\n### Impact\nAn attacker can cause a complete outage of the gRPC server by sending a request missing both `:authority` and `Host` headers, provided they can successfully establish a transport connection.\n\n### Patches\nThe issue has been addressed in `master` (and backported to `1.84.0`, `1.83.2` and `1.82.2`). The fix updates the HTTP/2 transport layer to reject requests missing both `:authority` and `Host` headers early, maintaining consistency with and other gRPC language implementations.\n",
+                "markdown": "> A vulnerability exists in gRPC-Go servers configured with `xds.NewGRPCServer()` where a crafted request missing both `:authority` and `Host` headers can cause a server panic, resulting in a Denial of Service (DoS).\n\nServers built with `xds.NewGRPCServer` install an xDS routing interceptor on every RPC. This interceptor looks up the request’s `:authority` header to pick a virtual host. The HTTP/2 server transport previously accepted requests that had neither `:authority` nor `Host`. When this happened, the xDS routing interceptor attempted to access the first element of an empty slice of authorities, leading to an index out of bounds panic. Since the per-RPC goroutine does not recover from panics, the entire server process would terminate.\n\nThis panic occurs in the interceptor pipeline, meaning the transport credentials handshake (TLS, mTLS, or ALTS) and HTTP/2 connection establishment must complete successfully before the crafted request can reach this logic.\n- Insecure/Standard TLS: If the server permits insecure (plaintext) connections or standard credentials (where client certs are not checked), any unauthenticated remote attacker can trigger the crash.\n- mTLS / ALTS: If strict transport-level authentication is enforced at the network edge or transport layer (e.g., requiring a valid client certificate), the attacker must possess valid transport credentials to initiate the stream and trigger the panic.\n\n### Impact\nAn attacker can cause a complete outage of the gRPC server by sending a request missing both `:authority` and `Host` headers, provided they can successfully establish a transport connection.\n\n### Patches\nThe issue has been addressed in `master` (and backported to `1.84.0`, `1.83.2` and `1.82.2`). The fix updates the HTTP/2 transport layer to reject requests missing both `:authority` and `Host` headers early, maintaining consistency with and other gRPC language implementations.\n\n|                                                                                                                                                                                                                                                           |\n|Package                                                                                                                                                                                                          pkg:golang/google.golang.org/grpc@1.83.1  |\n|Affected range                                                                                                                                                                                                   >=1.83.0,<1.83.2                          |\n|Fixed version                                                                                                                                                                                                    1.83.2                                    |\n|[[CVSS Score 8.7] [CVSS Vector CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X]]                                            |\n"
+              },
+              "properties": {
+                "affected_version": ">=1.83.0,<1.83.2",
+                "cvssV3": 8.7,
+                "cvssV3_severity": "HIGH",
+                "cvssV3_vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X",
+                "fixed_version": "1.83.2",
+                "purls": [
+                  "pkg:golang/google.golang.org/grpc@1.83.1"
+                ],
+                "security-severity": "8.7",
+                "tags": [
+                  "HIGH"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-78663",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-78663"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-78663?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "The HTTP/2 server can refund connection-level flow control twice for the same data: Once when a client resets a stream (refunding data for any sent-but-unread portion of the stream), and again when a request handler reads the buffered data. A malicious client can exploit this to bypass the configured connection-level flow control limit (MaxReceiveBufferPerConnection). Total buffered data is still limited by the concurrent stream limit and stream-level flow control.\n",
+                "markdown": "> The HTTP/2 server can refund connection-level flow control twice for the same data: Once when a client resets a stream (refunding data for any sent-but-unread portion of the stream), and again when a request handler reads the buffered data. A malicious client can exploit this to bypass the configured connection-level flow control limit (MaxReceiveBufferPerConnection). Total buffered data is still limited by the concurrent stream limit and stream-level flow control.\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<0.60.0",
+                "cvssV3_severity": "CRITICAL",
+                "fixed_version": "0.60.0",
+                "purls": [
+                  "pkg:golang/golang.org/x/net@0.57.0",
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "9.1",
+                "tags": [
+                  "CRITICAL"
+                ]
+              }
+            },
+            {
+              "id": "CVE-2026-56857",
+              "name": "OsPackageVulnerability",
+              "shortDescription": {
+                "text": "CVE-2026-56857"
+              },
+              "helpUri": "https://scout.docker.com/v/CVE-2026-56857?s=golang&n=stdlib&t=golang&vr=%3C1.26.9",
+              "help": {
+                "text": "On Windows, when the target of Root.Mkdir or Root.MkdirAll is a junction pointing to an empty location, the operation can create a directory at the junction target even when that target is located outside the root. This only applies to operations where the last path component is a junction (path/to/junction, but not path/junction/target).\n",
+                "markdown": "> On Windows, when the target of Root.Mkdir or Root.MkdirAll is a junction pointing to an empty location, the operation can create a directory at the junction target even when that target is located outside the root. This only applies to operations where the last path component is a junction (path/to/junction, but not path/junction/target).\n\n|                                          |\n|Package         pkg:golang/stdlib@1.26.8  |\n|Affected range  <1.26.9                   |\n|Fixed version   1.26.9                    |\n"
+              },
+              "properties": {
+                "affected_version": "<1.26.9",
+                "cvssV3_severity": "CRITICAL",
+                "fixed_version": "1.26.9",
+                "purls": [
+                  "pkg:golang/stdlib@1.26.8"
+                ],
+                "security-severity": "9.8",
+                "tags": [
+                  "CRITICAL"
+                ]
+              }
+            }
+          ],
+          "version": "1.25.0"
+        }
+      },
+      "results": [
+        {
+          "ruleId": "GO-2026-5932",
+          "ruleIndex": 0,
+          "kind": "fail",
+          "level": "none",
+          "message": {
+            "text": "Vulnerability   :GO-2026-5932                           \nSeverity        :UNSPECIFIED                            \nPackage         :pkg:golang/golang.org/x/crypto@0.55.0  \nAffected range  :>=0                                    \nFixed version   :not fixed                              \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-81870",
+          "ruleIndex": 1,
+          "kind": "fail",
+          "level": "note",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-81870                                                                     \nSeverity         :LOW                                                                                \nPackage          :pkg:golang/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp@1.44.0  \nAffected range   :>=1.5.0,<=1.44.0                                                                   \nFixed version    :1.45.0                                                                             \nCVSS Score       :2.0                                                                                \nCVSS Vector      :CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N                    \nEPSS Score       :0.001950                                                                           \nEPSS Percentile  :0.086020                                                                           \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-81870",
+          "ruleIndex": 1,
+          "kind": "fail",
+          "level": "note",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-81870                                                       \nSeverity         :LOW                                                                  \nPackage          :pkg:golang/go.opentelemetry.io/otel/exporters/otlp/otlptrace@1.44.0  \nAffected range   :>=1.5.0,<=1.44.0                                                     \nFixed version    :1.45.0                                                               \nCVSS Score       :2.0                                                                  \nCVSS Vector      :CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N      \nEPSS Score       :0.001950                                                             \nEPSS Percentile  :0.086020                                                             \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-81870",
+          "ruleIndex": 1,
+          "kind": "fail",
+          "level": "note",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-81870                                                                     \nSeverity         :LOW                                                                                \nPackage          :pkg:golang/go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc@1.44.0  \nAffected range   :>=1.5.0,<=1.44.0                                                                   \nFixed version    :1.45.0                                                                             \nCVSS Score       :2.0                                                                                \nCVSS Vector      :CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N                    \nEPSS Score       :0.001950                                                                           \nEPSS Percentile  :0.086020                                                                           \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-81870",
+          "ruleIndex": 1,
+          "kind": "fail",
+          "level": "note",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-81870                                                   \nSeverity         :LOW                                                              \nPackage          :pkg:golang/go.opentelemetry.io/otel/sdk@1.44.0                   \nAffected range   :>=1.5.0,<=1.44.0                                                 \nFixed version    :1.45.0                                                           \nCVSS Score       :2.0                                                              \nCVSS Vector      :CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N  \nEPSS Score       :0.001950                                                         \nEPSS Percentile  :0.086020                                                         \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2020-8912",
+          "ruleIndex": 2,
+          "kind": "fail",
+          "level": "note",
+          "message": {
+            "text": "Vulnerability    :CVE-2020-8912                                \nSeverity         :LOW                                          \nPackage          :pkg:golang/github.com/aws/aws-sdk-go@1.55.8  \nAffected range   :>=0                                          \nFixed version    :not fixed                                    \nEPSS Score       :0.002310                                     \nEPSS Percentile  :0.129860                                     \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-44903",
+          "ruleIndex": 3,
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-44903                                                                         \nSeverity         :MEDIUM                                                                                 \nPackage          :pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty  \nAffected range   :<0.311.3                                                                               \nFixed version    :0.311.3                                                                                \nCVSS Score       :5.1                                                                                    \nCVSS Vector      :CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:N                        \nEPSS Score       :0.002420                                                                               \nEPSS Percentile  :0.143480                                                                               \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-40179",
+          "ruleIndex": 4,
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-40179                                                                         \nSeverity         :MEDIUM                                                                                 \nPackage          :pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty  \nAffected range   :<0.311.2-0.20260410083055-07c6232d159b                                                 \nFixed version    :0.311.2-0.20260410083055-07c6232d159b                                                  \nCVSS Score       :5.3                                                                                    \nCVSS Vector      :CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:N/VI:N/VA:N/SC:L/SI:L/SA:N                        \nEPSS Score       :0.002590                                                                               \nEPSS Percentile  :0.164550                                                                               \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2020-8911",
+          "ruleIndex": 5,
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Vulnerability    :CVE-2020-8911                                \nSeverity         :MEDIUM                                       \nPackage          :pkg:golang/github.com/aws/aws-sdk-go@1.55.8  \nAffected range   :>=0                                          \nFixed version    :not fixed                                    \nEPSS Score       :0.003460                                     \nEPSS Percentile  :0.266290                                     \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-94448",
+          "ruleIndex": 6,
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-94448            \nSeverity         :MEDIUM                    \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.002020                  \nEPSS Percentile  :0.093960                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-97030",
+          "ruleIndex": 7,
+          "kind": "fail",
+          "level": "warning",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-97030            \nSeverity         :MEDIUM                    \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.002020                  \nEPSS Percentile  :0.093950                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-42154",
+          "ruleIndex": 8,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-42154                                                                         \nSeverity         :HIGH                                                                                   \nPackage          :pkg:golang/github.com/prometheus/prometheus@0.0.0-20260929131938-007a9e9ba628%2Bdirty  \nAffected range   :<0.305.2                                                                               \nFixed version    :0.305.2                                                                                \nCVSS Score       :7.5                                                                                    \nCVSS Vector      :CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H                                           \nEPSS Score       :0.008130                                                                               \nEPSS Percentile  :0.561990                                                                               \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-56855",
+          "ruleIndex": 9,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-56855                         \nSeverity         :HIGH                                   \nPackage          :pkg:golang/golang.org/x/crypto@0.55.0  \nAffected range   :<0.56.0                                \nFixed version    :0.56.0                                 \nEPSS Score       :0.005000                               \nEPSS Percentile  :0.415060                               \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-56866",
+          "ruleIndex": 10,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-56866            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.003090                  \nEPSS Percentile  :0.221430                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78659",
+          "ruleIndex": 11,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78659            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.005700                  \nEPSS Percentile  :0.460490                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78659",
+          "ruleIndex": 11,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78659                      \nSeverity         :HIGH                                \nPackage          :pkg:golang/golang.org/x/net@0.57.0  \nAffected range   :<0.60.0                             \nFixed version    :0.60.0                              \nEPSS Score       :0.005700                            \nEPSS Percentile  :0.460490                            \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78660",
+          "ruleIndex": 12,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78660            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.003030                  \nEPSS Percentile  :0.215380                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78660",
+          "ruleIndex": 12,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78660                      \nSeverity         :HIGH                                \nPackage          :pkg:golang/golang.org/x/net@0.57.0  \nAffected range   :<0.60.0                             \nFixed version    :0.60.0                              \nEPSS Score       :0.003030                            \nEPSS Percentile  :0.215380                            \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78662",
+          "ruleIndex": 13,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78662                         \nSeverity         :HIGH                                   \nPackage          :pkg:golang/golang.org/x/crypto@0.55.0  \nAffected range   :<0.56.0                                \nFixed version    :0.56.0                                 \nEPSS Score       :0.004310                               \nEPSS Percentile  :0.359220                               \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78667",
+          "ruleIndex": 14,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78667            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.003790                  \nEPSS Percentile  :0.303840                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78669",
+          "ruleIndex": 15,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78669            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.005680                  \nEPSS Percentile  :0.458960                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78669",
+          "ruleIndex": 15,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78669                      \nSeverity         :HIGH                                \nPackage          :pkg:golang/golang.org/x/net@0.57.0  \nAffected range   :<0.60.0                             \nFixed version    :0.60.0                              \nEPSS Score       :0.005680                            \nEPSS Percentile  :0.458960                            \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-94439",
+          "ruleIndex": 16,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-94439            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.003150                  \nEPSS Percentile  :0.228670                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-94440",
+          "ruleIndex": 17,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-94440            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.004040                  \nEPSS Percentile  :0.330860                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-97031",
+          "ruleIndex": 18,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-97031            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.003940                  \nEPSS Percentile  :0.320410                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-97032",
+          "ruleIndex": 19,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-97032                      \nSeverity         :HIGH                                \nPackage          :pkg:golang/golang.org/x/net@0.57.0  \nAffected range   :<0.60.0                             \nFixed version    :0.60.0                              \nEPSS Score       :0.004200                            \nEPSS Percentile  :0.348470                            \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-97032",
+          "ruleIndex": 19,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-97032            \nSeverity         :HIGH                      \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.004200                  \nEPSS Percentile  :0.348470                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-84445",
+          "ruleIndex": 20,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-84445                                                                                                                                                                  \nSeverity         :HIGH                                                                                                                                                                            \nPackage          :pkg:golang/google.golang.org/grpc@1.83.1                                                                                                                                        \nAffected range   :>=1.83.0,<1.83.2                                                                                                                                                                \nFixed version    :1.83.2                                                                                                                                                                          \nCVSS Score       :8.7                                                                                                                                                                             \nCVSS Vector      :CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N/E:X/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:X/AU:X/R:X/V:X/RE:X/U:X  \nEPSS Score       :0.006410                                                                                                                                                                        \nEPSS Percentile  :0.496820                                                                                                                                                                        \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78663",
+          "ruleIndex": 21,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78663                      \nSeverity         :CRITICAL                            \nPackage          :pkg:golang/golang.org/x/net@0.57.0  \nAffected range   :<0.60.0                             \nFixed version    :0.60.0                              \nEPSS Score       :0.005740                            \nEPSS Percentile  :0.462330                            \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-78663",
+          "ruleIndex": 21,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-78663            \nSeverity         :CRITICAL                  \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.005740                  \nEPSS Percentile  :0.462330                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CVE-2026-56857",
+          "ruleIndex": 22,
+          "kind": "fail",
+          "level": "error",
+          "message": {
+            "text": "Vulnerability    :CVE-2026-56857            \nSeverity         :CRITICAL                  \nPackage          :pkg:golang/stdlib@1.26.8  \nAffected range   :<1.26.9                   \nFixed version    :1.26.9                    \nEPSS Score       :0.004930                  \nEPSS Percentile  :0.410070                  \n"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/prometheus"
+                }
+              }
+            },
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "/bin/promtool"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

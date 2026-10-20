@@ -1,0 +1,20 @@
+{
+  "status": "PASSED",
+  "checks": [
+    "README setup generates private credentials from no .env",
+    "README Compose build/start with fresh PostgreSQL and Grafana volumes",
+    "verify_stage1.py passed",
+    "verify_lifecycle.py passed",
+    "verify_observability.py passed"
+  ],
+  "original_stack_restored": true,
+  "publishable_files": 127,
+  "local_secret_leaks": 0,
+  "private_paths_excluded": true,
+  "python_tests_passed": 57,
+  "frontend_build": "PASSED",
+  "frontend_lint": "PASSED",
+  "python_lint_format": "PASSED",
+  "remote_ci": "NOT_RUN",
+  "pushed": false
+}

@@ -1,0 +1,38 @@
+{
+  "results": [
+    "PASS: actual detector created/reused an open readiness incident",
+    "PASS: evidence-grounded diagnosis and backend role separation",
+    "PASS: executor succeeded but dependency verification failed; incident stayed open",
+    "PASS: independently verified recovery and idempotent execution replay",
+    "PASS: persistent timeline and audit record both outcomes"
+  ],
+  "incident_id": "bc94b334-3ab4-4598-bf94-ed942b72a801",
+  "action_id": "0d86b8ac-59ad-4ee8-b5d6-fdaacb4192a6",
+  "verification": {
+    "passed": true,
+    "samples": [
+      {
+        "status": 201,
+        "latency_seconds": 0.01882720199864707,
+        "ready": true,
+        "dependency_ready": true
+      },
+      {
+        "status": 201,
+        "latency_seconds": 0.02184948899957817,
+        "ready": true,
+        "dependency_ready": true
+      },
+      {
+        "status": 201,
+        "latency_seconds": 0.015749776001030114,
+        "ready": true,
+        "dependency_ready": true
+      }
+    ],
+    "new_requests": 3.0,
+    "new_errors": 0.0,
+    "method": "Three fresh business requests, readiness, dependency readiness and independent metrics counter delta",
+    "limitations": "Short local demo window; historical Prometheus rate may take one minute to clear"
+  }
+}

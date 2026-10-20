@@ -1,0 +1,83 @@
+{
+  "verified_at": "2026-10-19T03:34:17.361880+00:00",
+  "actions": [
+    {
+      "action": "restart_service",
+      "id": "57a23b3a-9336-4e4e-b464-6c621674c7a0",
+      "incident_id": "e8d11767-7690-471b-bd21-83c21129ef34",
+      "result": {
+        "passed": true,
+        "samples": [
+          {
+            "status": 201,
+            "latency_seconds": 0.03146531300080824,
+            "ready": true,
+            "dependency_ready": true
+          },
+          {
+            "status": 201,
+            "latency_seconds": 0.0201167790000909,
+            "ready": true,
+            "dependency_ready": true
+          },
+          {
+            "status": 201,
+            "latency_seconds": 0.01840268999876571,
+            "ready": true,
+            "dependency_ready": true
+          }
+        ],
+        "new_requests": 3.0,
+        "new_errors": 0,
+        "method": "Three fresh business requests, readiness, dependency readiness and independent metrics counter delta",
+        "limitations": "Short local demo window; historical Prometheus rate may take one minute to clear",
+        "restart": {
+          "previous_boot_id": "294c29a6-6dae-46a4-ad80-4a66dc4cdfe8",
+          "new_boot_id": "753a4b74-4093-41ee-8e71-d989e5085b2e"
+        }
+      },
+      "replay": "PASS"
+    },
+    {
+      "action": "rollback_demo",
+      "id": "fa5852ff-6a38-400c-a7e3-486d11b22762",
+      "incident_id": "a58394a9-2b80-4f03-a7e4-2bfb5183912a",
+      "result": {
+        "passed": true,
+        "samples": [
+          {
+            "status": 201,
+            "latency_seconds": 0.015956309998728102,
+            "ready": true,
+            "dependency_ready": true
+          },
+          {
+            "status": 201,
+            "latency_seconds": 0.019386085999940406,
+            "ready": true,
+            "dependency_ready": true
+          },
+          {
+            "status": 201,
+            "latency_seconds": 0.020922924000842613,
+            "ready": true,
+            "dependency_ready": true
+          }
+        ],
+        "new_requests": 3.0,
+        "new_errors": 0.0,
+        "method": "Three fresh business requests, readiness, dependency readiness and independent metrics counter delta",
+        "limitations": "Short local demo window; historical Prometheus rate may take one minute to clear",
+        "rollback": {
+          "timestamp": "2026-10-19T03:35:47.472003+00:00",
+          "type": "demo_release_rolled_back",
+          "from_version": "demo-v2",
+          "version": "demo-v1",
+          "revision": "61dad673-fc0f-4540-b2cd-3b7f799851bd",
+          "scope": "bundled demo behavior, not container image rollback"
+        }
+      },
+      "replay": "PASS"
+    }
+  ]
+}

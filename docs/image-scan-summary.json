@@ -1,0 +1,131 @@
+{
+  "scanned_at": "2026-10-19T05:21:17.641234+00:00",
+  "scanner": "Docker Scout",
+  "images": [
+    {
+      "image": "cloud-detective-ai-backend:latest",
+      "image_id": "sha256:93238e97daa4d688da892138bb71b82f6f667913d10085d768d1256a2f502319",
+      "report": "docs/image-scans/cloud-detective-ai-backend-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 28,
+      "sarif_levels": {
+        "note": 26,
+        "warning": 1,
+        "error": 1
+      },
+      "severity_counts": {
+        "LOW": 26,
+        "MEDIUM": 1,
+        "HIGH": 1
+      },
+      "rules_with_known_fix": 0
+    },
+    {
+      "image": "cloud-detective-ai-frontend:latest",
+      "image_id": "sha256:2551dbc161847a9d76933fd5ef5fcd223c9b9c22c41b8a6bddd3ce97f297fb43",
+      "report": "docs/image-scans/cloud-detective-ai-frontend-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 0,
+      "sarif_levels": {},
+      "severity_counts": {},
+      "rules_with_known_fix": 0
+    },
+    {
+      "image": "cloud-detective-ai-checkout:latest",
+      "image_id": "sha256:5d19c93cecc8723718b481e657892b3fe7a9b3b9f66a381a41904c330c13a70d",
+      "report": "docs/image-scans/cloud-detective-ai-checkout-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 28,
+      "sarif_levels": {
+        "note": 26,
+        "warning": 1,
+        "error": 1
+      },
+      "severity_counts": {
+        "LOW": 26,
+        "MEDIUM": 1,
+        "HIGH": 1
+      },
+      "rules_with_known_fix": 0
+    },
+    {
+      "image": "cloud-detective-ai-payment:latest",
+      "image_id": "sha256:8015e513222a8c243a427dafd871d9e3b762e50870decc2256613f94f91b03fa",
+      "report": "docs/image-scans/cloud-detective-ai-payment-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 28,
+      "sarif_levels": {
+        "note": 26,
+        "warning": 1,
+        "error": 1
+      },
+      "severity_counts": {
+        "LOW": 26,
+        "MEDIUM": 1,
+        "HIGH": 1
+      },
+      "rules_with_known_fix": 0
+    },
+    {
+      "image": "cloud-detective-ai-postgres:latest",
+      "image_id": "sha256:e5730f2ce4f693338b1f7842b9eac8d969ccb63bd1311ca9d4f24e83c77e7615",
+      "report": "docs/image-scans/cloud-detective-ai-postgres-latest.sarif.json",
+      "status": "SCANNED",
+      "findings": 71,
+      "sarif_levels": {
+        "note": 7,
+        "warning": 29,
+        "error": 35
+      },
+      "severity_counts": {
+        "LOW": 7,
+        "MEDIUM": 29,
+        "HIGH": 31,
+        "CRITICAL": 4
+      },
+      "rules_with_known_fix": 60
+    },
+    {
+      "image": "prom/prometheus:v3.13.4",
+      "image_id": "sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e",
+      "report": "docs/image-scans/prom-prometheus-v3.13.4.sarif.json",
+      "status": "SCANNED",
+      "findings": 31,
+      "sarif_levels": {
+        "none": 1,
+        "note": 5,
+        "warning": 5,
+        "error": 20
+      },
+      "severity_counts": {
+        "UNSPECIFIED": 1,
+        "LOW": 2,
+        "MEDIUM": 5,
+        "HIGH": 13,
+        "CRITICAL": 2
+      },
+      "rules_with_known_fix": 20
+    },
+    {
+      "image": "grafana/grafana:13.2.4",
+      "image_id": "sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f",
+      "report": "docs/image-scans/grafana-grafana-13.2.4.sarif.json",
+      "status": "SCANNED",
+      "findings": 93,
+      "sarif_levels": {
+        "none": 26,
+        "note": 1,
+        "warning": 10,
+        "error": 56
+      },
+      "severity_counts": {
+        "UNSPECIFIED": 24,
+        "LOW": 1,
+        "MEDIUM": 6,
+        "HIGH": 22,
+        "CRITICAL": 2
+      },
+      "rules_with_known_fix": 52
+    }
+  ]
+}

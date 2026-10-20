@@ -1,0 +1,5 @@
+{
+  "cross_service_trace_id": "1239e77c22e64d66b2fadc37e8fa29f1",
+  "checkout_and_payment_share_trace": true,
+  "grafana_panels": 4
+}

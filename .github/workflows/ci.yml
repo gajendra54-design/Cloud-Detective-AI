@@ -1,0 +1,51 @@
+name: checks
+on: [push, pull_request]
+jobs:
+  local-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: pip install -r requirements.lock
+      - run: ruff check backend demo-services scripts
+      - run: ruff format --check backend demo-services scripts
+      - run: pytest -q
+      - run: npm ci --prefix frontend
+      - run: npm run lint --prefix frontend
+      - run: npm run build --prefix frontend
+      - run: npm audit --prefix frontend --audit-level=high
+      - run: pip-audit --disable-pip --no-deps -r requirements.lock
+      - name: Configure disposable environment
+        run: python scripts/setup_env.py
+      - run: docker compose config --quiet
+      - run: docker compose up --build -d --wait --wait-timeout 180
+      - run: docker compose exec -T backend python verify_accounts.py
+      - run: python scripts/verify_stage1.py
+      - run: python scripts/verify_lifecycle.py
+      - run: python scripts/verify_observability.py
+      - run: python scripts/verify_recovery_actions.py
+      - run: python scripts/verify_concurrency.py
+      - run: python scripts/verify_database_restart.py
+      - name: Container logs on failure
+        if: failure()
+        run: docker compose logs --tail 100
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-verification
+          path: |
+            docs/*verification.json
+            docs/image-scan-summary.json
+            docs/image-scans/*.sarif.json
+          if-no-files-found: ignore
+      - name: Stop disposable stack
+        if: always()
+        run: docker compose down

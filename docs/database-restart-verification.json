@@ -1,0 +1,14 @@
+{
+  "checked_at": "2026-10-19T05:35:24.984113+00:00",
+  "status": "PASSED",
+  "outage_checks": "readiness 503; liveness 200",
+  "preserved_records": {
+    "incidents": 11,
+    "timeline_events": 77,
+    "audit_events": 94,
+    "users": 3
+  },
+  "backend_restarted": false,
+  "monitor_resumed": true,
+  "limitations": "Graceful single-node database outage; not crash consistency or distributed failover"
+}

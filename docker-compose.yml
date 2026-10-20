@@ -1,0 +1,109 @@
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: observability/postgres/Dockerfile
+    environment:
+      POSTGRES_USER: detective
+      POSTGRES_DB: detective
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U detective -d detective"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 256m
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      CHECKOUT_URL: http://checkout:8000
+      PAYMENT_URL: http://payment:8000
+      DEMO_CONTROL_TOKEN: ${DEMO_CONTROL_TOKEN}
+      INVESTIGATOR_TOKEN: ${INVESTIGATOR_TOKEN:?Set INVESTIGATOR_TOKEN}
+      APPROVER_TOKEN: ${APPROVER_TOKEN:?Set APPROVER_TOKEN}
+      LEGACY_TOKENS_ENABLED: ${LEGACY_TOKENS_ENABLED:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-15}
+      DATABASE_URL: postgresql+psycopg://detective:${POSTGRES_PASSWORD}@postgres/detective
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ready')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 256m
+  checkout:
+    restart: "on-failure:3"
+    build:
+      context: .
+      dockerfile: demo-services/Dockerfile
+    environment:
+      SERVICE_NAME: checkout
+      DEMO_RESTART_ENABLED: "true"
+      PAYMENT_URL: http://payment:8000
+      DEMO_CONTROL_TOKEN: ${DEMO_CONTROL_TOKEN:?Set DEMO_CONTROL_TOKEN in .env}
+    ports: ["127.0.0.1:8001:8000"]
+    depends_on:
+      payment:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    cpus: 0.5
+  payment:
+    restart: "on-failure:3"
+    build:
+      context: .
+      dockerfile: demo-services/Dockerfile
+    environment:
+      SERVICE_NAME: payment
+      DEMO_RESTART_ENABLED: "true"
+      DEMO_CONTROL_TOKEN: ${DEMO_CONTROL_TOKEN}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    mem_limit: 128m
+    cpus: 0.5
+  prometheus:
+    image: prom/prometheus:v3.13.4
+    volumes: ["./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["127.0.0.1:9090:9090"]
+    mem_limit: 256m
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports: ["127.0.0.1:5173:8080"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    mem_limit: 128m
+  grafana:
+    image: grafana/grafana:13.2.4
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["127.0.0.1:3000:3000"]
+    mem_limit: 256m
+volumes:
+  pgdata:
+  grafanadata:
